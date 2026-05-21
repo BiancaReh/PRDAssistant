@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const slug = body.reportTitle?.trim() ? slugify(body.reportTitle) : "tgi-analysis";
   const filename = `${slug}-${date}.docx`;
 
-  return new NextResponse(buffer as unknown as BodyInit, {
+  return new NextResponse(new Uint8Array(buffer), {
     status: 200,
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
