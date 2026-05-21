@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import type { TGIAnalysisResult, ThemeTable } from "@/lib/tgi-types";
 
@@ -122,6 +123,35 @@ type Props = {
 };
 
 export function TGIResults({ result, jsonParseFailed, preFiltered, reportTitle, onNewAnalysis }: Props) {
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+
+  async function handleDownload() {
+    setDownloading(true);
+    setDownloadError("");
+    try {
+      const res = await fetch("/api/insights/tgi-analysis/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result, reportTitle }),
+      });
+      if (!res.ok) throw new Error("Download failed.");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? "tgi-analysis.docx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError("Could not generate the Word doc. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
 
@@ -239,13 +269,17 @@ export function TGIResults({ result, jsonParseFailed, preFiltered, reportTitle, 
         </div>
       </div>
 
-      {/* Download placeholder (Issue 5) + New Analysis */}
+      {/* Download + New Analysis */}
       <div className="border-t-4 border-black pt-8 flex flex-col gap-4">
+        {downloadError && (
+          <p className="font-label text-xs font-black uppercase tracking-widest text-red-600">{downloadError}</p>
+        )}
         <button
-          disabled
-          className="w-full bg-black text-white px-10 py-5 border-4 border-black font-headline font-black uppercase tracking-widest text-lg opacity-40 cursor-not-allowed"
+          onClick={handleDownload}
+          disabled={downloading}
+          className="w-full bg-black text-white px-10 py-5 border-4 border-black font-headline font-black uppercase tracking-widest text-lg hover:bg-primary-container hover:text-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          ↓ DOWNLOAD_WORD_DOC
+          {downloading ? "GENERATING..." : "↓ DOWNLOAD_WORD_DOC"}
         </button>
         <button
           onClick={onNewAnalysis}
