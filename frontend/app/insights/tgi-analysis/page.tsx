@@ -2,27 +2,51 @@
 
 import { AuthGate } from "@/components/AuthGate";
 import { TGIIntakeForm, TGIFormData } from "@/components/TGIIntakeForm";
+import { TGIResults } from "@/components/TGIResults";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import type { TGIAnalysisResult } from "@/lib/tgi-types";
 
-type ParseMeta = {
-  sheetsDetected: string[];
-  waveDate: string;
-  charCount: number;
-};
+const LOADING_STEPS = [
+  "Reading Excel data...",
+  "Scanning for audience signals...",
+  "Applying analyst knowledge...",
+  "Verifying findings against source...",
+  "Writing analysis...",
+];
 
 export default function TGIAnalysisPage() {
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
   const [error, setError] = useState("");
   const [tooLarge, setTooLarge] = useState<{ charCount: number; sheetCount: number } | null>(null);
-  const [parseMeta, setParseMeta] = useState<ParseMeta | null>(null);
+  const [result, setResult] = useState<TGIAnalysisResult | null>(null);
+  const [jsonParseFailed, setJsonParseFailed] = useState(false);
+  const [preFiltered, setPreFiltered] = useState(false);
   const [pendingForm, setPendingForm] = useState<TGIFormData | null>(null);
+  const stepIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      setLoadingStep(0);
+      stepIntervalRef.current = setInterval(() => {
+        setLoadingStep((s) => (s + 1) % LOADING_STEPS.length);
+      }, 4000);
+    } else {
+      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
+    }
+    return () => {
+      if (stepIntervalRef.current) clearInterval(stepIntervalRef.current);
+    };
+  }, [isLoading]);
 
   async function submit(data: TGIFormData, preFilter = false) {
     setIsLoading(true);
     setError("");
     setTooLarge(null);
-    setParseMeta(null);
+    setResult(null);
+    setJsonParseFailed(false);
+    setPreFiltered(preFilter);
     setPendingForm(data);
 
     const formData = new FormData();
@@ -38,7 +62,15 @@ export default function TGIAnalysisPage() {
         body: formData,
       });
 
-      let json: { status?: string; charCount?: number; sheetCount?: number; sheetsDetected?: string[]; waveDate?: string; error?: string };
+      let json: {
+        status?: string;
+        charCount?: number;
+        sheetCount?: number;
+        result?: TGIAnalysisResult;
+        jsonParseFailed?: boolean;
+        preFiltered?: boolean;
+        error?: string;
+      };
       try {
         json = await res.json();
       } catch {
@@ -54,17 +86,25 @@ export default function TGIAnalysisPage() {
         return;
       }
 
-      setParseMeta({
-        sheetsDetected: json.sheetsDetected!,
-        waveDate: json.waveDate!,
-        charCount: json.charCount!,
-      });
+      setResult(json.result!);
+      setJsonParseFailed(json.jsonParseFailed ?? false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setIsLoading(false);
     }
   }
+
+  function handleNewAnalysis() {
+    setResult(null);
+    setTooLarge(null);
+    setError("");
+    setJsonParseFailed(false);
+    setPendingForm(null);
+  }
+
+  const showResults = result && !isLoading;
+  const showForm = !result && !isLoading;
 
   return (
     <AuthGate>
@@ -89,7 +129,10 @@ export default function TGIAnalysisPage() {
           {isLoading && (
             <div className="border-4 border-black bg-primary-container p-8 text-center mb-8 neo-brutalist-shadow">
               <p className="font-headline font-black text-xl uppercase tracking-tighter">
-                Reading your report — this may take a moment
+                Analysing your report — this may take a minute
+              </p>
+              <p className="font-body text-sm text-on-primary-container mt-3">
+                {LOADING_STEPS[loadingStep]}
               </p>
               <div className="mt-4 flex justify-center gap-2">
                 <span className="w-3 h-3 bg-black inline-block animate-bounce [animation-delay:0ms]" />
@@ -102,7 +145,13 @@ export default function TGIAnalysisPage() {
           {/* Error */}
           {error && (
             <div className="border-4 border-black bg-surface-container-lowest p-6 mb-8">
-              <p className="font-label text-xs font-black uppercase tracking-widest text-red-600">{error}</p>
+              <p className="font-label text-xs font-black uppercase tracking-widest text-red-600 mb-3">{error}</p>
+              <button
+                onClick={handleNewAnalysis}
+                className="font-label text-xs font-black uppercase tracking-widest hover:underline"
+              >
+                ← TRY AGAIN
+              </button>
             </div>
           )}
 
@@ -132,34 +181,19 @@ export default function TGIAnalysisPage() {
             </div>
           )}
 
-          {/* Stub result — will be replaced by full results in Issue 3 */}
-          {parseMeta && !isLoading && (
-            <>
-              <div className="border-4 border-black bg-surface-container-lowest p-6 mb-8">
-                <p className="font-label text-xs font-black uppercase tracking-widest mb-3">Report parsed successfully</p>
-                <p className="font-body text-sm text-on-surface-variant">
-                  <strong>Sheets detected:</strong> {parseMeta.sheetsDetected.join(", ")}
-                </p>
-                {parseMeta.waveDate && (
-                  <p className="font-body text-sm text-on-surface-variant mt-1">
-                    <strong>Source:</strong> {parseMeta.waveDate}
-                  </p>
-                )}
-                <p className="font-body text-sm text-on-surface-variant mt-1">
-                  <strong>Data size:</strong> {Math.round(parseMeta.charCount / 1000)}k characters
-                </p>
-              </div>
-              <button
-                onClick={() => { setParseMeta(null); setPendingForm(null); setTooLarge(null); }}
-                className="w-full px-6 py-5 border-4 border-black font-headline font-black uppercase tracking-widest text-sm bg-surface-container-lowest hover:bg-black hover:text-white transition-colors"
-              >
-                NEW_ANALYSIS ↺
-              </button>
-            </>
+          {/* Results */}
+          {showResults && (
+            <TGIResults
+              result={result}
+              jsonParseFailed={jsonParseFailed}
+              preFiltered={preFiltered}
+              reportTitle={pendingForm?.reportTitle}
+              onNewAnalysis={handleNewAnalysis}
+            />
           )}
 
-          {/* Form — hidden once results are shown */}
-          {!parseMeta && !isLoading && (
+          {/* Form */}
+          {showForm && (
             <TGIIntakeForm onSubmit={(data) => submit(data)} isLoading={isLoading} />
           )}
         </div>
