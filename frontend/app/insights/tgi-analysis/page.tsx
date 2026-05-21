@@ -82,6 +82,10 @@ export default function TGIAnalysisPage() {
       }
 
       if (json.status === "too_large") {
+        if (preFilter) {
+          setError("This file is too large to analyse even after pre-filtering. Try splitting the report into fewer sheets and re-uploading.");
+          return;
+        }
         setTooLarge({ charCount: json.charCount!, sheetCount: json.sheetCount! });
         return;
       }
