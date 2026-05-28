@@ -174,7 +174,7 @@ export default function SurveyQuestionnairePage() {
         body: JSON.stringify(data),
       });
 
-      let json: { questionnaire?: ParsedQuestionnaire; qaStatus?: "ok" | "network_error" | "parse_error"; error?: string };
+      let json: { questionnaire?: ParsedQuestionnaire; qaSkipped?: boolean; qaStatus?: "ok" | "network_error" | "parse_error"; error?: string };
       try {
         json = await res.json();
       } catch {

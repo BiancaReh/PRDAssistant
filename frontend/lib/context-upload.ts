@@ -62,6 +62,21 @@ export async function parseFile(file: File): Promise<string> {
     return result.value;
   }
 
+  if (name.endsWith(".pptx")) {
+    const JSZip = (await import("jszip")).default;
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const slideFiles = Object.keys(zip.files)
+      .filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))
+      .sort();
+    const texts: string[] = [];
+    for (const slideFile of slideFiles) {
+      const xml = await zip.files[slideFile].async("text");
+      const matches = xml.match(/<a:t[^>]*>([^<]+)<\/a:t>/g) ?? [];
+      texts.push(matches.map((m) => m.replace(/<[^>]+>/g, "")).join(" "));
+    }
+    return texts.join("\n");
+  }
+
   if (name.endsWith(".pdf")) {
     const pdfjsLib = await import("pdfjs-dist");
     pdfjsLib.GlobalWorkerOptions.workerSrc = "";
@@ -85,9 +100,9 @@ export async function parseFile(file: File): Promise<string> {
 
 export function validateSurveyFile(file: File): { valid: boolean; error?: string } {
   const name = file.name.toLowerCase();
-  const allowed = [".pdf", ".docx"];
+  const allowed = [".pdf", ".docx", ".pptx"];
   if (!allowed.some((ext) => name.endsWith(ext))) {
-    return { valid: false, error: "Unsupported file type. Allowed: PDF, DOCX" };
+    return { valid: false, error: "Unsupported file type. Allowed: PDF, DOCX, PPTX" };
   }
   if (file.size > 10 * 1024 * 1024) {
     return { valid: false, error: "File too large. Maximum size is 10MB." };
