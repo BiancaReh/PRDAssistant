@@ -64,11 +64,7 @@ export async function parseFile(file: File): Promise<string> {
 
   if (name.endsWith(".pdf")) {
     const pdfjsLib = await import("pdfjs-dist");
-    // Run without a worker — safe for browser environments where worker setup isn't configured
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
-      import.meta.url
-    ).toString();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "";
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const pages: string[] = [];
